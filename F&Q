@@ -1,0 +1,8 @@
+####安装R包遇到的问题
+注意看error后面的信息
+#不存在叫'cachem'这个名字的程辑包
+单独安装cachem即可
+#compilation failed for package 'cachem'
+无法正常编译
+install.packages("cachem", type="binary")即可
+###binary意为编译版
