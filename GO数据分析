@@ -1,0 +1,38 @@
+#根据GO数据库对目标基因的描述，对选定基因的功能进行数量统计(旋转柱形图）
+
+#############################
+GO文件
+
+GO_classify(三大类）        Detail（子分类）            Number   
+**********                 ********                   ******
+
+
+
+#############################
+empty_bar <- 3     #3为分组数，在GO中，描述为细胞组分、分子功能、生物过程
+to_add <- data.frame( matrix(NA, empty_bar*nlevels(GO$GO_classify), ncol(GO)) )
+colnames(to_add) <- colnames(GO)
+to_add$GO_classify <- rep(levels(GO$GO_classify), each=empty_bar)
+data <- rbind(GO, to_add)
+data <- data %>% arrange(GO_classify)
+data$id <- seq(1, nrow(data))
+
+label_data <- data
+number_of_bar <- nrow(label_data)
+angle <- 90 - 360 * (label_data$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
+label_data$hjust <- ifelse( angle < -90, 1, 0)
+label_data$angle <- ifelse(angle < -90, angle+180, angle)
+
+p <- ggplot(data, aes(x=as.factor(id), y=GO$Number, fill=GO$GO_classify)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
+  geom_bar(stat="identity", alpha=0.5) +
+  ylim(-100,120) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = unit(rep(-1,4), "cm") 
+  ) +
+  coord_polar() + 
+  geom_text(data=label_data, aes(x=id, y=GO$Number+10, label=GO$Detail, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
