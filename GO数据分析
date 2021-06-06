@@ -32,7 +32,13 @@ p <- ggplot(data, aes(x=as.factor(id), y=GO$Number, fill=GO$GO_classify)) +     
     axis.text = element_blank(),
     axis.title = element_blank(),
     panel.grid = element_blank(),
-    plot.margin = unit(rep(-1,4), "cm") 
+    plot.margin = unit(rep(-1,4), "cm") ########### rep(a,b) a决定了图片大小
   ) +
   coord_polar() + 
   geom_text(data=label_data, aes(x=id, y=GO$Number+10, label=GO$Detail, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
+
+########################
+储存为矢量图(svg)格式
+svg(filename = "example.svg",width = 10,height = 7,family = "sans",pointsize = 12)   #width\height决定图片边界大小
+dev.off()
+file.exists(c("example3.svg"))
