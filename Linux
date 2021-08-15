@@ -1,0 +1,19 @@
+Linux查看进程
+（1）ps -eo pid,tty,user,comm,lstart,etime|grep 需要查看的进程的关键词（这里面-eo后面的就是显示内容的可选项，不是根据进程的相关信息填入）
+参数说明：
+ pid：进程ID
+ tty：终端
+ user：用户
+ comm：进程名
+ lstart：开始时间
+ etime：运行时间
+ （2）ps -ef:标准格式显示进程
+      ps -aux:BSD格式显示进程
+     USER:用户名
+ %CPU:进程占用的CPU百分比
+ %MEM:占用内存的百分比
+ VSZ:该进程使用的虚拟內存量（KB）
+ RSS:该进程占用的固定內存量（KB）（驻留中页的数量）
+ STAT:进程的状态
+ START:该进程被触发启动时间
+ TIME:该进程实际使用CPU运行的时间
