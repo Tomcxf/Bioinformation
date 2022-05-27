@@ -1,0 +1,390 @@
+# Software used for RNA-seq(dRNA-seq and cRNA-seq)
+
+## The sra files
+
+- download sra files
+
+  **prefetch & fasterq-dump**
+
+- transform sra to fastq
+
+  **fastq-dump**
+
+  **fasterq-dump**: faster than fastq-dump. It can recognize single-read and paired-read automatically. But it can generate the fa.gz format like fastq-dump 
+
+## Basecall(both for dRNA-seq and cRNA-seq)
+
+​        **Guppy**
+
+```shell
+for cRNA-seq
+guppy_basecaller -c the_cfg_for_dna -i /fast5_files/ -s outputdir/
+for dRNA-seq
+guppy_basecaller -c the_cfg_for_rna -i /fast5_files/ -s outputdir/
+```
+
+##### show the quality of sequencing
+
+​		**minion_qc & nanoQC**
+
+## 	Correct base-calling errors
+
+​		**Proovread software tool**: by using  parallel illumina RNA-seq data
+
+## 	Fastq data management
+
+##### Concatenate Fastq Files
+
+​		**pyBioTools**
+
+```shell
+pyBioTools Fastq Filter 
+-i theInputDocument
+-o theOutputFile
+#######some selectable options
+--remove_duplicates 
+--min_len 
+--min_qual 
+```
+
+## Data quality assessment
+
+**minion_qc: **demonstrate the quality of data by using sequencing_summary file.
+
+```shell
+##### Installation
+wget https://raw.githubusercontent.com/roblanf/minion_qc/master/MinIONQC.R -O MinIONQC.R
+## Run following code in R
+install.packages(c("data.table","futile.logger","ggplot2","optparse","plyr","readr","reshap2","scales","viridis","yaml"))
+############################################################
+## One file
+Rscript MinIONQC.R -i path/to/sequencing_summary.txt
+## Multiple files
+Rscript MinIONQC.R -i path/to/parent_directory
+# the required files all should be named sequencing_summary.txt located in parent_dirctory separated by a unique name. If they have different name, merge them to a single file named sequencing_summary.txt
+```
+
+
+
+##### **NanoPlot**: A tool uses fasta\q document from guppy. 
+
+​						   This tool aims to draw photos to demonstrate  the quality of data.
+
+```shell
+#####it needs the summary file created by the basecalling using guppy
+
+Nanoplot --summary summarydocumentbyguppy.txt --loglength -o output_dictionary
+
+```
+
+
+
+## Mapping and alignment
+
+**cut adapter**
+
+####If you don't know the sequence of adapter, you need to predict it by using **minion**
+
+​		**minion**: predicting the adapter
+
+#### download 
+
+[minion]: http://wwwdev.ebi.ac.uk/enright-dev/kraken/reaper/binaries/reaper-13-100/linux/
+
+chmod 777 minion
+
+./minion ...
+
+```shell
+#### Input may have been compressed using gzip.
+minion search-adapter -i inputfiles -show 1
+#### The result may contain several candidate adapter. Generally, the probablity of the first is the highest.So we choose "-show 1" to get it.
+#### The result is below "criterion=sequence-density"
+#### The size of file is limited. The max line number I tested is 49603, with 307M.
+```
+
+**porechop**: trimming the adapter
+
+```shell
+porechop -i inputfile -o outputfile
+####porechop can detect the adapter automatically by its 'adapters.py'
+####If you have known the sequence of adapter(eg:predicted by minion),you can edit the 'adapters.py'
+```
+
+
+
+##### Generation of a Reference  File(both for genome and transcriptome)
+
+The transcriptome annotation file we need to generate the transcriptome reference is always in gtf/gff format. We need to transform it to bed format.
+
+**convert2bed**
+
+```shell
+convert2bed --input=gtf/gff --output=bed < transcriptome annotation.gtf/gff > reference_transcriptome.bed
+```
+
+Sometimes the annotation file's format is 'gbff', we need to transform in to gff first.
+
+**EMBOSS**
+
+```shell
+conda install emboss
+seqret -feature -osformat2 gff3 -outseq annotation.gff annotation.gb
+```
+
+**bedtools**
+
+```shell
+bedtools getfasta -fi the_reference_genome.fai -s -split -name \
+-bed reference_transcriptome.bed > the_reference_transcriptome.fa
+```
+
+
+
+##### mapping
+
+​		**minimap2**: both for cRNA-seq and dRNA-seq
+
+```shell
+#### Generate the index(it isn't necessary)
+minimap2 -d output.min input.fna
+
+#### Mapping to the Genome
+minimap2 -ax map-ont output.min(or input.fna) basecall_by_guppy.fastq >minimap_genome.sam
+
+#### Mapping to the Transcriptome
+#####for cDNA-seq
+minimap2 -ax map-ont -splice the_reference_transcriptome.fa\
+basecall_by_guppy.fastq > minimap_transcriptome.sam
+#####for dRNA-seq
+minimap2 -ax map-ont -splice -uf -k14 the_reference_transcriptome.fa\
+basecall_by_guppy.fastq > minimap_transcriptome.sam
+		
+```
+
+​		**tablet**: A visualization tool to show the effect of mapping and alignment
+
+​                    *#when using Unix, it will show in GUI.*
+
+##### **sort&index**
+
+```shell
+samtools sort -@ 4 -O bam -o xxx.bam xxx.sam 
+#this step can automatically transform .sam  to /.bam
+samtools index xxx.bam
+samtools faidx xxx.fna
+```
+
+
+
+## QC
+
+​		**NanoFilt**: A tool filters reads based on the quality or length of them.
+
+​		**Filtlong**: It have the same function as NanoFilt.
+
+​		**pycoQC**
+
+## Estimating Transcripts Count
+
+##### 		for cDNA-seq:
+
+```shell
+samtools view minimap_transcriptome.bam | cut -f 3 | sort | uniq -c
+```
+
+##### 		for dRNA-seq:
+
+**NanoCount**
+
+```shell
+#### align
+minimap2 -t 4 -ax map-ont -p 0 -N 10 transcriptome.fa.gz reads.fastq.gz | samtools view -bh > aligned_reads.bam
+#### estimate
+NanoCount -i aligned_reads.bam -o transcript_counts.tsv
+```
+
+
+
+## Estimate poly(A) length(dRNA-seq)
+
+​		**nanopolish-polya  **
+
+```shell
+#### index
+nanopolish index （-s {sequencing_summary.txt}） -d /fast5/pass data_after_guppy.fastq
+-s is optional, it can make index faster.
+the path of fast5 and fastq should print absolute path avioding later read index error.
+#### poly(A) estimate
+nanopolish polya --reads data_after_guppy.fastq --bam data_after_map.bam \
+--genome reference.fas > ./polya_results.tsv
+#### filter 'PASS'
+grep 'PASS' polya_results.tsv > polya_results.pass_only.tsv
+head -1 polya_results.tsv > header.tsv
+cat header.tsv polya_results.pass_only.tsv > result.tsv
+```
+
+​		**tailfindr**：an R package to estimate poly(A) tail length on ONT long-read sequencing data.
+
+
+
+## RNA modification detection(dRNA-seq)
+
+**nanocompore**
+
+```shell
+#### One can create a new conda environment for install nanocompore 
+##### create environment with python 3.7
+conda create -n nanocompore python=3.7
+conda install -c bioconda nanocompore
+#### data preparation
+nanopolish index -s {sequencing_summary.txt} -d {raw_fast5_dir} {basecalled_fastq}
+
+nanopolish eventalign --reads {basecalled_fastq} \
+                      --bam {aligned_reads_bam}  \
+                      --genome {transcriptome_fasta} \
+                      --print-read-names \
+                      --scale-events     \
+                      --samples >{eventalign_reads_tsv}
+nanocompore eventalign_collapse -t 6 \
+                                -i {eventalign_reads_tsv} \
+                                -o {eventalign_collapsed_reads_tsv}                      
+#### start calculate
+nanocompore sampcomp \
+    --file_list1 ./data/S1_R1.tsv,./data/S1_R2.tsv \ #### R1/R2 is duplication which is recommanded but not necessary
+    --file_list2 ./data/S2_R1.tsv,./data/S2_R2.tsv \
+    --label1 S1 \
+    --label2 S2 \
+    --fasta ./reference/ref.fa \
+    --outpath ./results
+```
+
+```python
+#### followed analysis needs python
+from nanocompore.SampCompDB import SampCompDB, jhelp
+db = SampCompDB (db_fn = "results/simulated_SampComp.db",
+    fasta_fn = "references/simulated/ref.fa")
+#### the path of db_fn and fasta_fn have better be the relative path.
+#### Print general metadata information
+print (db)
+#### Prit list of references containing valid data
+print (db.ref_id_list)
+
+
+#### Generate text reports
+#### It can create three types of files: save_report / save_shift_stats / save_to_bed
+####### save_report : containing all the statistical results for all the positions
+db.save_report (output_fn="./results/simulated_report.tsv")
+#downstream edition
+awk '{if($7!="nan"&&$7!="1.0")print}' simulated_report.tsv > simulated_report_final.tsv
+
+####### save_shift_stats : Save the mean, median and sd intensity and dwell time for each condition and for each position.
+db.save_shift_stats (output_fn="./results/simulated_shift.tsv")
+
+####### save_to_bed
+db.save_to_bed (output_fn="./results/simulated_sig_positions.bed")
+```
+
+
+
+
+
+
+
+**xPore** (for m6A)
+
+```shell
+#### xPore needs 'eventalign output' created by nanopolish
+nanopolish index -d fast5_files/ reads.fasta
+nanopolish eventalign \
+    --reads reads.fasta \
+    --bam reads-ref.sorted.bam \
+    --genome ref.fa \
+    --scale-events > reads-ref.eventalign.txt
+
+#### data prepartion
+xpore dataprep \
+--eventalign reads-ref.eventalign.txt \
+--gtf_or_gff annoation.gtf \
+--transcript_fasta transcriptomefa \
+--out_dir  \
+--genome
+#### Prepare a .yml configuration file. You can get this by editing below
+notes: Pairwise comparison without replicates with default parameter setting.
+
+xpore diffmod --config xxx.yml
+
+#####################################################
+data:
+    data1_name:
+        rep1: data1_path
+    data2_name:
+        rep2: data2_path
+
+out: ./out # output dir
+#####################################################
+
+#### model differential modifications
+xpore diffmod --config Hek293T_config.yml
+#### the diffmod.table is the Result table of differential RNA modification across all tested positions
+
+#### consider only one modification type per k-mer by finding the majority
+xpore postprocessing --diffmod_dir the_dir_of_diffmod.table
+```
+
+**Tombo ** (for m6A and m5C)
+
+```shell
+####When encountering ValueError, one can try to downgrade numpy<1.20.
+
+#### The type of fast5 files created by nanopore is multi fast5, we need to transform it to single using 'ont_fast5_api'
+multi_to_single_fast5 --input_path fast5 --save_path single_fast5 --recursive
+#### merge all single fast5 files in different folders to one
+#### one must do 'preprocess' before doing any anlysis
+tombo preprocess annotate_raw_with_fastqs \
+   --fast5-basedir <fast5s-base-directory> \
+   --fastq-filenames <reads.fastq>
+   --sequencing-summary-filenames <summary file after guppy>
+   --processes 400
+   ############################################
+   summary file need to be edited
+   ######
+   before
+   filename		read_id
+   xxx.fast5	AAAAA
+   XXX.fast5    BBBBB
+   ######
+   after
+   filename 	read_id
+   AAAAA.fast5	AAAAA
+   BBBBB.fast5	BBBBB	
+   ############################################
+
+#### re-squiggle raw reads
+#### RNA can replace reference fasta file to fastq.
+tombo resquiggle path/to/fast5s/ reference.fasta --num-most-common-errors 5
+  --processes 400
+#################
+when encounter:Final unsuccessful reads summary (100.0% reads unsuccessfully processed
+add --overwrite
+
+#### RNA modifications 
+##### two samples
+tombo detect_modifications level_sample_compare \
+   --fast5-basedirs path/to/fast5s/ \
+   --alternate-fast5-basedirs path/to/comparison/fast5s/ \
+   --statistics-file-basename level_testing \  #### this file can download from tombo document in github or train by other command
+   --statistic-type  5mC/m6A/CpG.....
+##### one sample
+tombo detect_modifications alternative_model --fast5-basedirs path/to/fast5s/ \
+    --statistics-file-basename native.e_coli_sample \
+    --alternate-bases dam dcm --processes 4
+
+#### text output
+tombo text_output browser_files --fast5-basedirs <path/to/fast5s/> \
+      --statistics-filename <output stats file after detecting> \
+      --file-types coverage dampened_fraction \
+      --browser-file-basename 
+
+ 
+```
